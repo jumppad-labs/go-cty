@@ -82,7 +82,7 @@ func impliedStructType(rt reflect.Type, path cty.Path) (cty.Type, error) {
 
 	fieldIdxs := structTagIndices(rt)
 	if len(fieldIdxs) == 0 {
-		return cty.NilType, path.NewErrorf("no cty.Type for %s (no cty field tags)", rt)
+		return cty.NilType, path.NewErrorf("no cty.Type for %s (no hcl field tags)", rt)
 	}
 
 	atys := make(map[string]cty.Type, len(fieldIdxs))
