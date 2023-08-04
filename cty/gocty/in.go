@@ -355,7 +355,7 @@ func toCtyObject(val reflect.Value, attrTypes map[string]cty.Type, path cty.Path
 		// path to give us a place to put our GetAttr step.
 		path = append(path, cty.PathStep(nil))
 
-		attrFields := structTagIndices(val.Type())
+		attrFields := structTagIndicesWithAnon(val.Type())
 
 		vals := make(map[string]cty.Value, len(attrTypes))
 		for k, at := range attrTypes {
@@ -364,12 +364,30 @@ func toCtyObject(val reflect.Value, attrTypes map[string]cty.Type, path cty.Path
 			}
 
 			if fieldIdx, have := attrFields[k]; have {
-				var err error
-				vals[k], err = toCtyValue(val.Field(fieldIdx), at, path)
-				if err != nil {
-					return cty.NilVal, err
+				if fieldIdx == -1 {
+					ct := val.Type().NumField()
+
+					for i := 0; i < ct; i++ {
+						field := val.Type().Field(i)
+						if field.Anonymous {
+							anon, err := toCtyObject(val.Field(i), attrTypes, path)
+							if err != nil {
+								return cty.NilVal, err
+							}
+
+							vals[k] = anon.AsValueMap()[k]
+						}
+					}
+
+				} else {
+					var err error
+					vals[k], err = toCtyValue(val.Field(fieldIdx), at, path)
+					if err != nil {
+						return cty.NilVal, err
+					}
 				}
 			} else {
+				// check the embedded type
 				vals[k] = cty.NullVal(at)
 			}
 		}
@@ -528,10 +546,10 @@ func toCtyPassthrough(wrappedVal reflect.Value, wantTy cty.Type, path cty.Path) 
 // toCtyUnwrapPointer is a helper for dealing with Go pointers. It has three
 // possible outcomes:
 //
-// - Given value isn't a pointer, so it's just returned as-is.
-// - Given value is a non-nil pointer, in which case it is dereferenced
-//   and the result returned.
-// - Given value is a nil pointer, in which case an invalid value is returned.
+//   - Given value isn't a pointer, so it's just returned as-is.
+//   - Given value is a non-nil pointer, in which case it is dereferenced
+//     and the result returned.
+//   - Given value is a nil pointer, in which case an invalid value is returned.
 //
 // For nested pointer types, like **int, they are all dereferenced in turn
 // until a non-pointer value is found, or until a nil pointer is encountered.

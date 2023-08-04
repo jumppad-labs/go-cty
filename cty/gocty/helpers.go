@@ -37,6 +37,36 @@ func structTagIndices(st reflect.Type) map[string]int {
 
 	for i := 0; i < ct; i++ {
 		field := st.Field(i)
+		if field.Anonymous {
+
+		}
+
+		attrName := field.Tag.Get("hcl")
+
+		// split the attribute name as we are using hcl tags
+		attrs := strings.Split(attrName, ",")
+		if len(attrs) > 0 && attrs[0] != "" {
+			ret[attrs[0]] = i
+		}
+	}
+
+	return ret
+}
+
+func structTagIndicesWithAnon(st reflect.Type) map[string]int {
+	ct := st.NumField()
+	ret := make(map[string]int, ct)
+
+	for i := 0; i < ct; i++ {
+		field := st.Field(i)
+		if field.Anonymous {
+			st := structTagIndices(field.Type)
+
+			for k, _ := range st {
+				ret[k] = -1
+			}
+		}
+
 		attrName := field.Tag.Get("hcl")
 
 		// split the attribute name as we are using hcl tags

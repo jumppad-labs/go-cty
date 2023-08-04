@@ -476,15 +476,26 @@ func fromCtyObject(val cty.Value, target reflect.Value, path cty.Path) error {
 
 			fieldIdx, exists := targetFields[k]
 			if !exists {
-				return path.NewErrorf("unsupported attribute %q", k)
-			}
+				// if the target does not exist, this could be due to the field
+				// being on an embedded or anonymous field
 
-			ev := val.GetAttr(k)
+				ct := target.Type().NumField()
 
-			targetField := target.Field(fieldIdx)
-			err := fromCtyValue(ev, targetField, path)
-			if err != nil {
-				return err
+				for i := 0; i < ct; i++ {
+					field := target.Type().Field(i)
+					if field.Anonymous {
+						fromCtyObject(val, target.Field(i), path)
+					}
+				}
+
+				//return path.NewErrorf("unsupported attribute %q", k)
+			} else {
+				ev := val.GetAttr(k)
+				targetField := target.Field(fieldIdx)
+				err := fromCtyValue(ev, targetField, path)
+				if err != nil {
+					return err
+				}
 			}
 		}
 

@@ -9,6 +9,50 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
+type Embedded struct {
+	ID string `hcl:"id"`
+}
+
+type Main struct {
+	Embedded `hcl:",remain"`
+	Name     string `hcl:"name"`
+}
+
+func TestFromCtyValueWithEmbeddedTypes(t *testing.T) {
+	m := Main{}
+
+	ctyT := map[string]cty.Value{
+		"id":   cty.StringVal("abc"),
+		"name": cty.StringVal("Erik"),
+	}
+
+	err := FromCtyValue(cty.ObjectVal(ctyT), &m)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fmt.Println(m)
+}
+
+func TestToCtyValueWithEmbeddedTypes(t *testing.T) {
+	m := Main{
+		Embedded: Embedded{ID: "123"},
+		Name:     "Nic",
+	}
+
+	typ, err := ImpliedType(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctyVal, err := ToCtyValue(m, typ)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fmt.Println(ctyVal)
+}
+
 func TestOut(t *testing.T) {
 	capsuleANative := &capsuleType1Native{"capsuleA"}
 

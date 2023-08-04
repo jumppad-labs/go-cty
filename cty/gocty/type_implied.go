@@ -104,5 +104,21 @@ func impliedStructType(rt reflect.Type, path cty.Path) (cty.Type, error) {
 		}
 	}
 
+	// now check any anonymous fields
+	ct := rt.NumField()
+	for i := 0; i < ct; i++ {
+		field := rt.Field(i)
+		if field.Anonymous {
+			anon, err := impliedStructType(field.Type, path)
+			if err != nil {
+				return cty.NilType, err
+			}
+
+			for k, v := range anon.AttributeTypes() {
+				atys[k] = v
+			}
+		}
+	}
+
 	return cty.Object(atys), nil
 }
