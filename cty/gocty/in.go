@@ -365,18 +365,37 @@ func toCtyObject(val reflect.Value, attrTypes map[string]cty.Type, path cty.Path
 
 			if fieldIdx, have := attrFields[k]; have {
 				if fieldIdx == -1 {
+					// This attribute is in an anonymous field
 					ct := val.Type().NumField()
+					found := false
 
 					for i := 0; i < ct; i++ {
 						field := val.Type().Field(i)
 						if field.Anonymous {
-							anon, err := toCtyObject(val.Field(i), attrTypes, path)
+							// Get the type for this anonymous field and see if it has this attribute
+							anonType, err := impliedType(field.Type, path)
 							if err != nil {
-								return cty.NilVal, err
+								continue
 							}
-
-							vals[k] = anon.AsValueMap()[k]
+							
+							if anonType.IsObjectType() {
+								if _, hasAttr := anonType.AttributeTypes()[k]; hasAttr {
+									// This anonymous field has the attribute we're looking for
+									vals[k], err = toCtyValue(val.Field(i), anonType, path)
+									if err != nil {
+										return cty.NilVal, err
+									}
+									// Extract the specific attribute from the anonymous field's cty value
+									vals[k] = vals[k].GetAttr(k)
+									found = true
+									break
+								}
+							}
 						}
+					}
+					
+					if !found {
+						vals[k] = cty.NullVal(at)
 					}
 
 				} else {

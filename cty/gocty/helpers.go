@@ -60,9 +60,10 @@ func structTagIndicesWithAnon(st reflect.Type) map[string]int {
 	for i := 0; i < ct; i++ {
 		field := st.Field(i)
 		if field.Anonymous {
-			st := structTagIndices(field.Type)
+			// Recursively process anonymous fields to handle nested embedding
+			nested := structTagIndicesWithAnon(field.Type)
 
-			for k, _ := range st {
+			for k, _ := range nested {
 				ret[k] = -1
 			}
 		}
