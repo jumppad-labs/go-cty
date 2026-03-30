@@ -6,6 +6,10 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
+// maxImpliedTypeDepth prevents infinite recursion in self-referential types.
+// Matches Terraform's recursion limit.
+const maxImpliedTypeDepth = 10
+
 // ImpliedType takes an arbitrary Go value (as an interface{}) and attempts
 // to find a suitable cty.Type instance that could be used for a conversion
 // with ToCtyValue.
@@ -24,14 +28,25 @@ import (
 func ImpliedType(gv interface{}) (cty.Type, error) {
 	rt := reflect.TypeOf(gv)
 	var path cty.Path
-	return impliedType(rt, path)
+	return impliedTypeWithDepth(rt, path, 0)
 }
 
 func impliedType(rt reflect.Type, path cty.Path) (cty.Type, error) {
+	// Keep existing function for backward compatibility
+	return impliedTypeWithDepth(rt, path, 0)
+}
+
+func impliedTypeWithDepth(rt reflect.Type, path cty.Path, depth int) (cty.Type, error) {
+	// Check depth to prevent infinite recursion
+	if depth > maxImpliedTypeDepth {
+		// Return a generic map type to break the recursion
+		return cty.Map(cty.DynamicPseudoType), nil
+	}
+
 	switch rt.Kind() {
 
 	case reflect.Ptr:
-		return impliedType(rt.Elem(), path)
+		return impliedTypeWithDepth(rt.Elem(), path, depth)
 
 	// Primitive types
 	case reflect.Bool:
@@ -48,7 +63,7 @@ func impliedType(rt reflect.Type, path cty.Path) (cty.Type, error) {
 	// Collection types
 	case reflect.Slice:
 		path := append(path, cty.IndexStep{Key: cty.UnknownVal(cty.Number)})
-		ety, err := impliedType(rt.Elem(), path)
+		ety, err := impliedTypeWithDepth(rt.Elem(), path, depth+1)
 		if err != nil {
 			return cty.NilType, err
 		}
@@ -58,7 +73,7 @@ func impliedType(rt reflect.Type, path cty.Path) (cty.Type, error) {
 			return cty.NilType, path.NewErrorf("no cty.Type for %s (must have string keys)", rt)
 		}
 		path := append(path, cty.IndexStep{Key: cty.UnknownVal(cty.String)})
-		ety, err := impliedType(rt.Elem(), path)
+		ety, err := impliedTypeWithDepth(rt.Elem(), path, depth+1)
 		if err != nil {
 			return cty.NilType, err
 		}
@@ -66,7 +81,7 @@ func impliedType(rt reflect.Type, path cty.Path) (cty.Type, error) {
 
 	// Structural types
 	case reflect.Struct:
-		return impliedStructType(rt, path)
+		return impliedStructTypeWithDepth(rt, path, depth+1)
 
 	default:
 		return cty.NilType, path.NewErrorf("no cty.Type for %s", rt)
@@ -74,6 +89,17 @@ func impliedType(rt reflect.Type, path cty.Path) (cty.Type, error) {
 }
 
 func impliedStructType(rt reflect.Type, path cty.Path) (cty.Type, error) {
+	// Keep existing function for backward compatibility
+	return impliedStructTypeWithDepth(rt, path, 0)
+}
+
+func impliedStructTypeWithDepth(rt reflect.Type, path cty.Path, depth int) (cty.Type, error) {
+	// Check depth to prevent infinite recursion
+	if depth > maxImpliedTypeDepth {
+		// Return a generic object type to break the recursion
+		return cty.Object(map[string]cty.Type{}), nil
+	}
+
 	if valueType.AssignableTo(rt) {
 		// Special case: cty.Value represents cty.DynamicPseudoType, for
 		// type conformance checking.
@@ -95,7 +121,7 @@ func impliedStructType(rt reflect.Type, path cty.Path) (cty.Type, error) {
 			path[len(path)-1] = cty.GetAttrStep{Name: k}
 
 			ft := rt.Field(fi).Type
-			aty, err := impliedType(ft, path)
+			aty, err := impliedTypeWithDepth(ft, path, depth)
 			if err != nil {
 				return cty.NilType, err
 			}
@@ -109,7 +135,7 @@ func impliedStructType(rt reflect.Type, path cty.Path) (cty.Type, error) {
 	for i := 0; i < ct; i++ {
 		field := rt.Field(i)
 		if field.Anonymous {
-			anon, err := impliedStructType(field.Type, path)
+			anon, err := impliedStructTypeWithDepth(field.Type, path, depth)
 			if err != nil {
 				return cty.NilType, err
 			}
